@@ -59,4 +59,20 @@ confusionMatrix(t_subtest$classe,predRF)
 varImp(rfFit)
 
 
-## 
+## Gradient boosting model
+Boost <- train(y=t_subtrain[,54],x=t_subtrain[,1:53],method="gbm",verbose=FALSE)
+predBoost <- predict(Boost,newdata=t_subtest)
+
+confusionMatrix(t_subtest$classe,predBoost)
+
+## Of the three models, random forests delivers the greatest accuracy and is selected as the final model
+
+## Final Model testing
+
+library(randomForest)
+predRFfinal <- as.factor(predict(rfFit,newdata=test_dat))
+testing$pred<- predRFfinal
+
+confusionMatrix(test_dat$classe,predRFfinal)
+varImp(rfFit)
+
