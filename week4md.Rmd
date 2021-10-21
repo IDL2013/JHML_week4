@@ -1,0 +1,128 @@
+---
+title: "JHDS ML week 4 project"
+author: "Iain Leslie"
+date: "18/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+The use of personal wearables enables the collection of relatively reliable data about personal activity. In this project, the objective was to predict classes of activity through the use of data from accelerometers on the belt, forearm, arm, and dumbell of 6 study participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+## Loading data and required packages
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+The following code was used to load the necessary datasets and libraries.
+```{r,echo=TRUE}
+# Loading training and test data
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+testing <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+
+# Installing libraries
+library(caret)
+library(rpart)
+library(rattle)
+library(randomForest)
+
+```
+
+## Data cleaning and preparation
+
+Four separate approaches were taken to cleaning and preparing the dataset: removing variables with minimal (near zero) variance, classifying factor variables, removing variables with 5% or greater missing values, and removing the first five columns which were not expected to represent reliable predictors of classe (index number and time stamps).
+
+```{r, echo=TRUE}
+
+# Removing near zero variance variables
+nzv <- nearZeroVar(training)
+
+train_dat <- training[,-nzv]
+test_dat <- testing[,-nzv]
+
+# Classifying factor variables
+train_dat$user_name <- as.factor(train_dat$user_name)
+train_dat$classe <- as.factor(train_dat$classe)
+
+test_dat$user_name <- as.factor(test_dat$user_name)
+
+# Removing variables with at least 5% NA
+train_dat <- train_dat[,which(colMeans(!is.na(train_dat))>0.95)]
+
+test_dat <- test_dat[,which(colMeans(!is.na(test_dat))>0.95)]
+
+# Removing x variable and time stamps
+train_dat <- train_dat[,-(1:5)]
+test_dat <- test_dat[,-(1:5)]
+
+```
+
+## Cross-validation
+A simple approach to cross-validation was taken by separating the training dataset into one further training set and a corresponding testing set.
+
+``` {r, echo=TRUE}
+# Cross-validation
+
+inTrain <- createDataPartition(y=train_dat$classe,p=0.6,list=FALSE)
+
+t_subtrain <- train_dat[inTrain,]
+t_subtest <- train_dat[-inTrain,]
+```
+
+## The fun bit: fitting the models
+
+Three modelling approaches were attempted: a decision tree, random forest and gradient boosting. 
+
+The key outputs of each is shown separately below.
+
+### Decision tree
+``` {r, echo=TRUE}
+## Decision tree
+treeFit <- train(classe ~ .,data=t_subtrain,method="rpart")
+print(treeFit$finalModel)
+
+library(rattle)
+fancyRpartPlot(treeFit$finalModel)
+
+pred_tree <- predict(treeFit,newdata=t_subtest)
+t_subtest$pred_tree <- pred_tree
+
+confusionMatrix(t_subtest$classe,t_subtest$pred_tree)
+```
+
+### Random forests
+``` {r,echo=TRUE}
+## Random forest
+library(randomForest)
+rfFit <- randomForest(y=t_subtrain[,54],x=t_subtrain[,1:53])
+
+predRF <- as.factor(predict(rfFit,newdata=t_subtest))
+t_subtest$classe <- as.factor(t_subtest$classe)
+
+confusionMatrix(t_subtest$classe,predRF)
+varImp(rfFit)
+```
+
+### Gradient boosting
+``` {r, echo=TRUE}
+## Gradient boosting model
+Boost <- train(y=t_subtrain[,54],x=t_subtrain[,1:53],method="gbm",verbose=FALSE)
+predBoost <- predict(Boost,newdata=t_subtest)
+
+confusionMatrix(t_subtest$classe,predBoost)
+```
+
+## Results
+Of the three models, Random Forests delivers the greatest accuracy as well as being less computationally intensive than gradient boosting. Random forest was therefore selected for use as the final model and applied to the testing dataset.
+
+``` {r,echo=TRUE}
+library(randomForest)
+predRFfinal <- as.factor(predict(rfFit,newdata=test_dat))
+testing$pred<- predRFfinal
+
+confusionMatrix(test_dat$classe,predRFfinal)
+varImp(rfFit)
+```
